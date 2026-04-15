@@ -1,0 +1,30 @@
+# Build artifacts
+.anchor
+target
+**/*.rs.bk
+
+# Dependencies
+node_modules
+.yarn
+yarn-error.log
+
+# Local testing and environment
+test-ledger
+.DS_Store
+.env
+.env.local
+
+# Sensitive Keys (Safety first)
+# Ignore all JSON files by default to prevent leaking private keys
+*.json
+**/*-keypair.json
+**/*.json
+
+# White-list specific configuration JSON files that ARE needed
+!package.json
+!tsconfig.json
+!composer.json
+!package-lock.json
+!bitsave/programs/bitsave/Cargo.toml
+!bitsave/Cargo.toml
+!Anchor.toml

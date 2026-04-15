@@ -1,11 +1,3 @@
-# Bitsave Solana Protocol
-
-Bitsave is a decentralized **SaveFi (Savings + DeFi)** protocol. It provides a financial infrastructure that allows users to create goal-oriented savings plans, accumulate interest based on protocol activity, and avoid the volatility of the broader crypto market by locking funds securely.
-
-This repository contains the Solana implementation of the Bitsave smart contracts, built using the [Anchor framework](https://www.anchor-lang.com/).
-
----
-
 ## How It Works
 
 If you are familiar with the older EVM (Ethereum) version of Bitsave, you know it used a "Factory" pattern where the main contract deployed unique "Child Contracts" for every single user to hold their funds.

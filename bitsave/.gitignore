@@ -1,7 +1,7 @@
 # Build artifacts
 .anchor
 target/*
-!target/idl/
+!target/idl/bitsave.json
 **/*.rs.bk
 
 # Dependencies

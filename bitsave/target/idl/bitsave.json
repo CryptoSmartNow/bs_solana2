@@ -1,0 +1,725 @@
+{
+  "address": "8p4LcCZUsg53vjBP6F2cuWUuZNtHqX8v2EF72oQFkoLn",
+  "metadata": {
+    "name": "bitsave",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "create_saving",
+      "discriminator": [
+        251,
+        3,
+        244,
+        247,
+        173,
+        165,
+        210,
+        130
+      ],
+      "accounts": [
+        {
+          "name": "global_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "saving",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  118,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_vault"
+              },
+              {
+                "kind": "arg",
+                "path": "name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "admin_account",
+          "writable": true
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "maturity_time",
+          "type": "i64"
+        },
+        {
+          "name": "penalty",
+          "type": "u8"
+        },
+        {
+          "name": "safe_mode",
+          "type": "bool"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "increment_saving",
+      "discriminator": [
+        83,
+        156,
+        74,
+        115,
+        109,
+        70,
+        195,
+        197
+      ],
+      "accounts": [
+        {
+          "name": "global_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "saving",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  118,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_vault"
+              },
+              {
+                "kind": "account",
+                "path": "saving.name",
+                "account": "Saving"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "global_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "stable_coin_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "cs_token_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "join_bitsave",
+      "discriminator": [
+        247,
+        8,
+        240,
+        132,
+        127,
+        19,
+        211,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "global_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "admin_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw_saving",
+      "discriminator": [
+        158,
+        126,
+        155,
+        1,
+        178,
+        231,
+        163,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "user_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "saving",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  118,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user_vault"
+              },
+              {
+                "kind": "account",
+                "path": "saving.name",
+                "account": "Saving"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GlobalState",
+      "discriminator": [
+        163,
+        46,
+        74,
+        168,
+        216,
+        123,
+        133,
+        98
+      ]
+    },
+    {
+      "name": "Saving",
+      "discriminator": [
+        135,
+        220,
+        183,
+        2,
+        131,
+        31,
+        93,
+        59
+      ]
+    },
+    {
+      "name": "UserVault",
+      "discriminator": [
+        23,
+        76,
+        96,
+        159,
+        210,
+        10,
+        5,
+        22
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AdminCallRequired",
+      "msg": "Admin only call required"
+    },
+    {
+      "code": 6001,
+      "name": "UserNotRegistered",
+      "msg": "User not registered"
+    },
+    {
+      "code": 6002,
+      "name": "NotEnoughToPayFee",
+      "msg": "Insufficient funds to pay fee"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidTime",
+      "msg": "Invalid maturity time"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidSaving",
+      "msg": "Invalid saving name or already exists"
+    },
+    {
+      "code": 6005,
+      "name": "NotSupported",
+      "msg": "Safe mode not yet supported"
+    },
+    {
+      "code": 6006,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "GlobalState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "stable_coin_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "cs_token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "join_fee",
+            "type": "u64"
+          },
+          {
+            "name": "saving_fee",
+            "type": "u64"
+          },
+          {
+            "name": "total_value_locked",
+            "type": "u64"
+          },
+          {
+            "name": "vault_state",
+            "type": "u64"
+          },
+          {
+            "name": "fountain",
+            "type": "u64"
+          },
+          {
+            "name": "user_count",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Saving",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "interest_accumulated",
+            "type": "u64"
+          },
+          {
+            "name": "start_time",
+            "type": "i64"
+          },
+          {
+            "name": "maturity_time",
+            "type": "i64"
+          },
+          {
+            "name": "penalty_percentage",
+            "type": "u8"
+          },
+          {
+            "name": "is_safe_mode",
+            "type": "bool"
+          },
+          {
+            "name": "is_valid",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserVault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_points",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "GLOBAL_STATE_SEED",
+      "type": "bytes",
+      "value": "[103, 108, 111, 98, 97, 108, 95, 115, 116, 97, 116, 101]"
+    },
+    {
+      "name": "PROTOCOL_TOKEN_VAULT_SEED",
+      "type": "bytes",
+      "value": "[112, 114, 111, 116, 111, 99, 111, 108, 95, 116, 111, 107, 101, 110, 95, 118, 97, 117, 108, 116]"
+    },
+    {
+      "name": "SAVING_SEED",
+      "type": "bytes",
+      "value": "[115, 97, 118, 105, 110, 103]"
+    },
+    {
+      "name": "USER_VAULT_SEED",
+      "type": "bytes",
+      "value": "[117, 115, 101, 114, 95, 118, 97, 117, 108, 116]"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 # Build artifacts
 .anchor
-target
+target/*
+!target/idl/
 **/*.rs.bk
 
 # Dependencies

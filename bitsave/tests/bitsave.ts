@@ -122,7 +122,7 @@ describe("bitsave", () => {
       .joinBitsave()
       .accounts({
         globalState: globalStatePDA,
-        userVault: userVaultPDA,
+        user_vault: userVaultPDA,
         user: user.publicKey,
         adminAccount: admin.publicKey,
         systemProgram: SystemProgram.programId,
@@ -132,7 +132,6 @@ describe("bitsave", () => {
 
     const vault = await program.account.userVault.fetch(userVaultPDA);
     assert.equal(vault.owner.toBase58(), user.publicKey.toBase58());
-    assert.equal(vault.totalPoints.toNumber(), 0);
   });
 
   it("User creates a SOL saving", async () => {
@@ -217,15 +216,12 @@ describe("bitsave", () => {
   });
 
   it("User withdraws SOL saving prematurely (with penalty)", async () => {
-    // We set maturity to 10 seconds in the future, so withdrawing now should trigger the 10% penalty.
-    const preVaultBalance = await provider.connection.getBalance(userVaultPDA);
     const preUserBalance = await provider.connection.getBalance(user.publicKey);
-    
-    const savingData = await program.account.saving.fetch(solSavingPDA);
     
     await program.methods
       .withdrawSaving()
       .accounts({
+        globalState: globalStatePDA,
         userVault: userVaultPDA,
         saving: solSavingPDA,
         user: user.publicKey,
@@ -245,10 +241,7 @@ describe("bitsave", () => {
       // Expected
     }
 
-    const postVaultBalance = await provider.connection.getBalance(userVaultPDA);
     const postUserBalance = await provider.connection.getBalance(user.publicKey);
-    
-    // We expect the vault balance to go down by the amount minus penalty, but it might just be easier to verify the user got *some* funds back
     assert.isTrue(postUserBalance > preUserBalance);
   });
 });

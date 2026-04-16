@@ -6,9 +6,9 @@ If you are familiar with the older EVM (Ethereum) version of Bitsave, you know i
 
 There are three core state accounts you need to know about:
 
-1. **`GlobalState`**: This is the master configuration account. It exists once per protocol deployment. It holds global variables like the `total_value_locked`, dynamic `vault_state` used for calculating interest rates, base stablecoin addresses, and protocol fees.
-2. **`UserVault`**: When a user registers with Bitsave, the protocol derives a unique `UserVault` PDA mathematically linked to their wallet address. This account acts as their personal profile, tracking metrics like the total interest points they've accumulated across all their savings plans.
-3. **`Saving`**: Instead of stuffing all of a user's savings plans into a massive, expensive list, each specific savings goal (e.g., "Car Fund", "Vacation") gets its very own PDA. This account stores the exact amount saved, the maturity date, early withdrawal penalties, and accrued interest.
+1. **GlobalState**: This is the master configuration account. It exists once per protocol deployment. It holds global variables like the `total_value_locked`, supported token mints, and protocol fees.
+2. **UserVault**: When a user registers with Bitsave, the protocol derives a unique `UserVault` PDA mathematically linked to their wallet address. This account acts as their personal profile on the protocol.
+3. **Saving**: Instead of stuffing all of a user's savings plans into a massive, expensive list, each specific savings goal (e.g., "Car Fund", "Vacation") gets its very own PDA. This account stores the exact amount saved, the maturity date, early withdrawal penalties, and validity state.
 
 ---
 
@@ -24,27 +24,27 @@ Before a user can save, they must join. They call this instruction to pay a smal
 
 The user specifies a name for their goal, a maturity time (when they are allowed to withdraw without penalties), and an amount.
 
-- They can save native SOL or any SPL Token (like USDC).
-- The funds are securely moved from their personal wallet into a **Protocol Vault Account** that only the Bitsave program can control.
+- They can save native SOL or any supported SPL Token.
+- The funds are securely moved from their personal wallet into a **Protocol Vault Account** that only the Bitsave program can control (specifically, a PDA derived for their vault).
 - A new `Saving` PDA is created to track this specific goal.
 
 ### 3. Topping Up (`increment_saving`)
 
-If a user wants to add more funds to a goal before it matures, they call this instruction. It pulls more funds from their wallet into the protocol vault and recalculates the total interest they are owed based on the new balance.
+If a user wants to add more funds to a goal before it matures, they call this instruction. It pulls more funds from their wallet into the protocol vault and updates the total balance in the `Saving` account.
 
 ### 4. Reaching the Goal (`withdraw_saving`)
 
 When the user is ready, they call withdraw.
 
-- **If they waited until maturity:** The program celebrates by calculating the final interest, adding it to their `UserVault` points, and sending their saved funds back to their wallet.
+- **If they waited until maturity:** The program returns their full saved funds back to their wallet.
 - **If they withdrew early:** The program applies the penalty percentage they agreed to upon creation, deducts it from their savings, and sends the remaining balance back to their wallet.
-- In both cases, the `Saving` PDA is marked as invalid and closed.
+- In both cases, the `Saving` PDA is closed, and its rent is returned to the user.
 
 ---
 
 ## Interconnection & Security
 
-- **No Middlemen:** The Bitsave program does not hold user funds directly in its main execution account. Instead, it creates Associated Token Accounts (ATAs) that are mathematically owned by the user's `UserVault` PDA.
+- **No Middlemen:** The Bitsave program does not hold user funds directly in its main execution account. Instead, it creates accounts that are mathematically owned by the user's `UserVault` PDA.
 - **Cross-Program Invocations (CPIs):** When funds move, Bitsave doesn't do the accounting itself. It securely asks the native Solana **System Program** (for SOL) or the **SPL Token Program** (for tokens) to perform the transfer.
 - **Mathematical Proofs:** You cannot access someone else's savings. Because a `Saving` PDA is derived using `[User Wallet Address + Vault Address + Saving Name]`, the Solana runtime guarantees that only the user holding the private keys to that wallet can interact with or withdraw those specific funds.
 
@@ -77,7 +77,9 @@ import { PublicKey } from "@solana/web3.js";
 import idl from "./path/to/bitsave.json"; // Your IDL file
 import { Bitsave } from "./path/to/bitsave_types"; // Optional: TypeScript types
 
-const PROGRAM_ID = new PublicKey("11111111111111111111111111111111"); // Replace with actual deployment ID
+const PROGRAM_ID = new PublicKey(
+  "8p4LcCZUsg53vjBP6F2cuWUuZNtHqX8v2EF72oQFkoLn",
+);
 
 export function useBitsaveProgram() {
   const { connection } = useConnection();
@@ -90,7 +92,6 @@ export function useBitsaveProgram() {
   });
   setProvider(provider);
 
-  // Initialize the program via IDL
   const program = new Program(
     idl as any,
     PROGRAM_ID,
@@ -145,9 +146,8 @@ const joinProtocol = async () => {
         globalState: globalStatePDA,
         userVault: userVaultPDA,
         user: wallet.publicKey,
-        adminAccount: new PublicKey("ADMIN_WALLET_ADDRESS_HERE"), // Replace with actual admin
+        adminAccount: new PublicKey("ADMIN_WALLET_ADDRESS_HERE"),
       })
-      // Anchor automatically adds the user's wallet as a signer!
       .rpc();
 
     console.log("Successfully joined! Tx:", tx);
@@ -178,8 +178,8 @@ const createSolSaving = async (
   const maturityTime = new BN(
     Math.floor(Date.now() / 1000) + daysToMaturity * 24 * 60 * 60,
   );
-  const penaltyPercentage = 10; // 10% penalty for early withdrawal
-  const safeMode = false; // Currently unsupported
+  const penaltyPercentage = 10;
+  const safeMode = false;
 
   try {
     const tx = await program.methods
@@ -187,12 +187,12 @@ const createSolSaving = async (
       .accounts({
         globalState: globalStatePDA,
         userVault: userVaultPDA,
-        saving: savingPDA, // Derived above
+        saving: savingPDA,
         user: wallet.publicKey,
         adminAccount: new PublicKey("ADMIN_WALLET_ADDRESS_HERE"),
-        tokenMint: PublicKey.default, // Indicates Native SOL
-        userTokenAccount: wallet.publicKey, // Ignored for SOL
-        vaultTokenAccount: userVaultPDA, // Ignored for SOL
+        tokenMint: PublicKey.default,
+        userTokenAccount: wallet.publicKey,
+        vaultTokenAccount: userVaultPDA,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -208,16 +208,14 @@ const createSolSaving = async (
 
 ### 5. Fetching and Displaying State
 
-You don't need a transaction to simply read data. Use `program.account` to fetch the current state of any PDA to display on your dashboard.
-
 ```typescript
 const fetchUserData = async () => {
   const program = useBitsaveProgram();
 
   try {
-    // Fetch the user's main profile metrics
+    // Fetch the user's main profile
     const vaultData = await program.account.userVault.fetch(userVaultPDA);
-    console.log("Total Points Earned:", vaultData.totalPoints.toString());
+    console.log("User Vault Owner:", vaultData.owner.toBase58());
 
     // Fetch a specific savings plan details
     const savingData = await program.account.saving.fetch(savingPDA);

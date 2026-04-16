@@ -198,6 +198,7 @@
         },
         {
           "name": "user_vault",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -433,6 +434,31 @@
       ],
       "accounts": [
         {
+          "name": "global_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108,
+                  111,
+                  98,
+                  97,
+                  108,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "user_vault",
           "writable": true,
           "pda": {
@@ -621,14 +647,6 @@
             "type": "u64"
           },
           {
-            "name": "vault_state",
-            "type": "u64"
-          },
-          {
-            "name": "fountain",
-            "type": "u64"
-          },
-          {
             "name": "user_count",
             "type": "u64"
           }
@@ -655,10 +673,6 @@
           {
             "name": "token_mint",
             "type": "pubkey"
-          },
-          {
-            "name": "interest_accumulated",
-            "type": "u64"
           },
           {
             "name": "start_time",
@@ -691,10 +705,6 @@
           {
             "name": "owner",
             "type": "pubkey"
-          },
-          {
-            "name": "total_points",
-            "type": "u64"
           }
         ]
       }

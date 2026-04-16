@@ -40,7 +40,7 @@ First, I call the `initialize` instruction. I have the admin set the protocol st
 
 ### 2. Onboarding a User
 
-Next, I simulate a user joining Bitsave. The user calls `joinBitsave`, pays their registration fee, and the program initializes their `UserVault` PDA. I then check the vault account to ensure the owner is correct and the points balance starts at zero.
+Next, I simulate a user joining Bitsave. The user calls `joinBitsave`, pays their registration fee, and the program initializes their `UserVault` PDA. I then check the vault account to ensure the owner is correct.
 
 ### 3. Creating a Native SOL Saving
 

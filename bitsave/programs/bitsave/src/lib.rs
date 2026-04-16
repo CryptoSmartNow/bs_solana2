@@ -1,18 +1,16 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Token, Transfer};
 use anchor_spl::associated_token::AssociatedToken;
 
 pub mod constants;
 pub mod state;
 pub mod errors;
-pub mod utils;
 
 use crate::constants::*;
 use crate::state::*;
 use crate::errors::*;
-use crate::utils::*;
 
-declare_id!("8p4LcCZUsg53vjBP6F2cuWUuZNtHqX8v2EF72oQFkoLn"); // Replace with actual ID after build
+declare_id!("8p4LcCZUsg53vjBP6F2cuWUuZNtHqX8v2EF72oQFkoLn");
 
 #[program]
 pub mod bitsave {
@@ -27,11 +25,9 @@ pub mod bitsave {
         global_state.admin = ctx.accounts.admin.key();
         global_state.stable_coin_mint = stable_coin_mint;
         global_state.cs_token_mint = cs_token_mint;
-        global_state.join_fee = 100_000; // 0.0001 ether equivalent in lamports? Let's use 100k lamports
+        global_state.join_fee = 100_000;
         global_state.saving_fee = 100_000;
-        global_state.total_value_locked = 100_000;
-        global_state.vault_state = 14_000_000;
-        global_state.fountain = 0;
+        global_state.total_value_locked = 0;
         global_state.user_count = 0;
         Ok(())
     }
@@ -56,7 +52,6 @@ pub mod bitsave {
         )?;
 
         user_vault.owner = ctx.accounts.user.key();
-        user_vault.total_points = 0;
         global_state.user_count += 1;
         
         Ok(())
@@ -97,8 +92,6 @@ pub mod bitsave {
             ],
         )?;
 
-        let mut actual_amount = amount;
-
         // Handle funds transfer (SOL or Token)
         if ctx.accounts.token_mint.key() == Pubkey::default() {
             // Transfer SOL to user_vault PDA
@@ -127,23 +120,17 @@ pub mod bitsave {
             token::transfer(cpi_ctx, amount)?;
         }
 
-        let interest = calculate_interest_with_bts(
-            actual_amount,
-            maturity_time - clock.unix_timestamp,
-            global_state.vault_state,
-            global_state.total_value_locked,
-        )?;
-
         saving.owner = ctx.accounts.user.key();
         saving.name = name;
-        saving.amount = actual_amount;
+        saving.amount = amount;
         saving.token_mint = ctx.accounts.token_mint.key();
-        saving.interest_accumulated = interest;
         saving.start_time = clock.unix_timestamp;
         saving.maturity_time = maturity_time;
         saving.penalty_percentage = penalty;
         saving.is_safe_mode = safe_mode;
         saving.is_valid = true;
+
+        global_state.total_value_locked += amount;
 
         Ok(())
     }
@@ -155,7 +142,7 @@ pub mod bitsave {
         let clock = Clock::get()?;
         let global_state = &mut ctx.accounts.global_state;
         let saving = &mut ctx.accounts.saving;
-        let user_vault = &ctx.accounts.user_vault;
+        let user_vault = &mut ctx.accounts.user_vault;
 
         if saving.maturity_time <= clock.unix_timestamp {
             return err!(BitsaveError::InvalidTime);
@@ -187,15 +174,8 @@ pub mod bitsave {
             token::transfer(cpi_ctx, amount)?;
         }
 
-        let extra_interest = calculate_interest_with_bts(
-            amount,
-            saving.maturity_time - clock.unix_timestamp,
-            global_state.vault_state,
-            global_state.total_value_locked,
-        )?;
-
         saving.amount += amount;
-        saving.interest_accumulated += extra_interest;
+        global_state.total_value_locked += amount;
 
         Ok(())
     }
@@ -203,16 +183,13 @@ pub mod bitsave {
     pub fn withdraw_saving(ctx: Context<WithdrawSaving>) -> Result<()> {
         let clock = Clock::get()?;
         let saving = &mut ctx.accounts.saving;
-        let user_vault = &mut ctx.accounts.user_vault;
+        let global_state = &mut ctx.accounts.global_state;
 
         let mut amount_to_withdraw = saving.amount;
 
         if clock.unix_timestamp < saving.maturity_time {
             // Apply penalty
             amount_to_withdraw = amount_to_withdraw * (100 - saving.penalty_percentage as u64) / 100;
-        } else {
-            // Reward points
-            user_vault.total_points += saving.interest_accumulated;
         }
 
         // Perform transfer from PDA to user
@@ -240,9 +217,8 @@ pub mod bitsave {
             token::transfer(cpi_ctx, amount_to_withdraw)?;
         }
 
+        global_state.total_value_locked -= saving.amount;
         saving.is_valid = false;
-        // In Solana, we usually close the account to reclaim lamports if it's no longer needed
-        // but for now I'll just mark it invalid to match EVM logic.
         
         Ok(())
     }
@@ -305,12 +281,12 @@ pub struct CreateSaving<'info> {
     pub admin_account: AccountInfo<'info>,
     /// CHECK: Token mint or Pubkey::default for SOL
     pub token_mint: AccountInfo<'info>,
-    #[account(mut)]
     /// CHECK: Validated manually or via CPI
-    pub user_token_account: UncheckedAccount<'info>, // Can be TokenAccount if not SOL
     #[account(mut)]
+    pub user_token_account: UncheckedAccount<'info>,
     /// CHECK: Validated manually or via CPI
-    pub vault_token_account: UncheckedAccount<'info>, // AssociatedTokenAccount owned by user_vault
+    #[account(mut)]
+    pub vault_token_account: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -321,7 +297,7 @@ pub struct CreateSaving<'info> {
 pub struct IncrementSaving<'info> {
     #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
     pub global_state: Account<'info, GlobalState>,
-    #[account(seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
+    #[account(mut, seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
     pub user_vault: Account<'info, UserVault>,
     #[account(
         mut,
@@ -332,11 +308,11 @@ pub struct IncrementSaving<'info> {
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    #[account(mut)]
     /// CHECK: Validated manually or via CPI
+    #[account(mut)]
     pub user_token_account: UncheckedAccount<'info>,
-    #[account(mut)]
     /// CHECK: Validated manually or via CPI
+    #[account(mut)]
     pub vault_token_account: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -344,6 +320,8 @@ pub struct IncrementSaving<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawSaving<'info> {
+    #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
+    pub global_state: Account<'info, GlobalState>,
     #[account(mut, seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
     pub user_vault: Account<'info, UserVault>,
     #[account(
@@ -351,16 +329,16 @@ pub struct WithdrawSaving<'info> {
         seeds = [SAVING_SEED, user_vault.key().as_ref(), saving.name.as_bytes()],
         bump,
         constraint = saving.is_valid && saving.owner == user.key(),
-        close = user // Close account to reclaim lamports
+        close = user
     )]
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    #[account(mut)]
     /// CHECK: Validated manually or via CPI
+    #[account(mut)]
     pub user_token_account: UncheckedAccount<'info>,
-    #[account(mut)]
     /// CHECK: Validated manually or via CPI
+    #[account(mut)]
     pub vault_token_account: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,

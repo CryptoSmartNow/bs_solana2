@@ -229,7 +229,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin,
-        space = GlobalState::SIZE,
+        space = 8 + GlobalState::INIT_SPACE,
         seeds = [GLOBAL_STATE_SEED],
         bump
     )]
@@ -246,7 +246,7 @@ pub struct JoinBitsave<'info> {
     #[account(
         init,
         payer = user,
-        space = UserVault::SIZE,
+        space = 8 + UserVault::INIT_SPACE,
         seeds = [USER_VAULT_SEED, user.key().as_ref()],
         bump
     )]
@@ -269,7 +269,7 @@ pub struct CreateSaving<'info> {
     #[account(
         init,
         payer = user,
-        space = Saving::SIZE,
+        space = 8 + Saving::INIT_SPACE,
         seeds = [SAVING_SEED, user_vault.key().as_ref(), name.as_bytes()],
         bump
     )]

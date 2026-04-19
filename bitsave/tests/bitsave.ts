@@ -182,7 +182,7 @@ describe("bitsave", () => {
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      } as any)
+      })
       .signers([user])
       .rpc();
 
@@ -207,7 +207,7 @@ describe("bitsave", () => {
         vaultTokenAccount: userVaultPDA,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
-      } as any)
+      })
       .signers([user])
       .rpc();
 
@@ -229,7 +229,7 @@ describe("bitsave", () => {
         vaultTokenAccount: userVaultPDA,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
-      } as any)
+      })
       .signers([user])
       .rpc();
       

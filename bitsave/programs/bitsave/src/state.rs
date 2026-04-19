@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[account]
+#[derive(InitSpace)]
 pub struct GlobalState {
     pub admin: Pubkey,
     pub stable_coin_mint: Pubkey,
@@ -11,22 +12,17 @@ pub struct GlobalState {
     pub user_count: u64,
 }
 
-impl GlobalState {
-    pub const SIZE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 8 + 8;
-}
-
 #[account]
+#[derive(InitSpace)]
 pub struct UserVault {
     pub owner: Pubkey,
 }
 
-impl UserVault {
-    pub const SIZE: usize = 8 + 32;
-}
-
 #[account]
+#[derive(InitSpace)]
 pub struct Saving {
     pub owner: Pubkey,
+    #[max_len(32)]
     pub name: String,
     pub amount: u64,
     pub token_mint: Pubkey, // default for native SOL
@@ -35,9 +31,4 @@ pub struct Saving {
     pub penalty_percentage: u8,
     pub is_safe_mode: bool,
     pub is_valid: bool,
-}
-
-impl Saving {
-    pub const MAX_NAME_LEN: usize = 32;
-    pub const SIZE: usize = 8 + 32 + (4 + Self::MAX_NAME_LEN) + 8 + 32 + 8 + 8 + 1 + 1 + 1;
 }

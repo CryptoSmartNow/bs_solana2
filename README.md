@@ -45,6 +45,7 @@ When the user is ready, they call withdraw.
 ## Interconnection & Security
 
 - **No Middlemen:** The Bitsave program does not hold user funds directly in its main execution account. Instead, it creates accounts that are mathematically owned by the user's `UserVault` PDA.
+- **Explicit Validation:** To prevent sophisticated attacks, the program explicitly verifies that any provided SPL Token accounts match the exact mint and ownership expected by the user's vault before interacting with them.
 - **Cross-Program Invocations (CPIs):** When funds move, Bitsave doesn't do the accounting itself. It securely asks the native Solana **System Program** (for SOL) or the **SPL Token Program** (for tokens) to perform the transfer.
 - **Mathematical Proofs:** You cannot access someone else's savings. Because a `Saving` PDA is derived using `[User Wallet Address + Vault Address + Saving Name]`, the Solana runtime guarantees that only the user holding the private keys to that wallet can interact with or withdraw those specific funds.
 

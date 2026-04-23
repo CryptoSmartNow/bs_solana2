@@ -16,4 +16,8 @@ pub enum BitsaveError {
     NotSupported,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    #[msg("Invalid token mint")]
+    InvalidMint,
+    #[msg("Invalid account owner")]
+    InvalidOwner,
 }

@@ -112,10 +112,16 @@
         },
         {
           "name": "user_token_account",
+          "docs": [
+            "Explicitly validated in the instruction logic for SPL transfers."
+          ],
           "writable": true
         },
         {
           "name": "vault_token_account",
+          "docs": [
+            "Explicitly validated in the instruction logic for SPL transfers."
+          ],
           "writable": true
         },
         {
@@ -258,10 +264,16 @@
         },
         {
           "name": "user_token_account",
+          "docs": [
+            "Explicitly validated in logic for SPL transfers."
+          ],
           "writable": true
         },
         {
           "name": "vault_token_account",
+          "docs": [
+            "Explicitly validated in logic for SPL transfers."
+          ],
           "writable": true
         },
         {
@@ -520,10 +532,16 @@
         },
         {
           "name": "user_token_account",
+          "docs": [
+            "Explicitly validated in logic for SPL transfers."
+          ],
           "writable": true
         },
         {
           "name": "vault_token_account",
+          "docs": [
+            "Explicitly validated in logic for SPL transfers."
+          ],
           "writable": true
         },
         {
@@ -614,6 +632,16 @@
       "code": 6006,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidMint",
+      "msg": "Invalid token mint"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidOwner",
+      "msg": "Invalid account owner"
     }
   ],
   "types": [

@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, Transfer};
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use anchor_spl::associated_token::AssociatedToken;
 
 pub mod constants;
@@ -22,13 +22,15 @@ pub mod bitsave {
         cs_token_mint: Pubkey,
     ) -> Result<()> {
         let global_state = &mut ctx.accounts.global_state;
-        global_state.admin = ctx.accounts.admin.key();
-        global_state.stable_coin_mint = stable_coin_mint;
-        global_state.cs_token_mint = cs_token_mint;
-        global_state.join_fee = 100_000;
-        global_state.saving_fee = 100_000;
-        global_state.total_value_locked = 0;
-        global_state.user_count = 0;
+        global_state.set_inner(GlobalState {
+            admin: ctx.accounts.admin.key(),
+            stable_coin_mint,
+            cs_token_mint,
+            join_fee: 100_000,
+            saving_fee: 100_000,
+            total_value_locked: 0,
+            user_count: 0,
+        });
         Ok(())
     }
 
@@ -51,14 +53,16 @@ pub mod bitsave {
             ],
         )?;
 
-        user_vault.owner = ctx.accounts.user.key();
+        user_vault.set_inner(UserVault {
+            owner: ctx.accounts.user.key(),
+        });
         global_state.user_count += 1;
         
         Ok(())
     }
 
-    pub fn create_saving(
-        ctx: Context<CreateSaving>,
+    pub fn create_saving<'info>(
+        ctx: Context<'_, '_, 'info, 'info, CreateSaving<'info>>,
         name: String,
         maturity_time: i64,
         penalty: u8,
@@ -109,6 +113,17 @@ pub mod bitsave {
                 ],
             )?;
         } else {
+            // Explicit Validation: Verify token accounts match mint and ownership
+            let user_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.user_token_account.data.borrow())?;
+            let vault_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.vault_token_account.data.borrow())?;
+            
+            if user_token.mint != ctx.accounts.token_mint.key() || vault_token.mint != ctx.accounts.token_mint.key() {
+                return err!(BitsaveError::InvalidMint);
+            }
+            if vault_token.owner != user_vault.key() {
+                return err!(BitsaveError::InvalidOwner);
+            }
+
             // Transfer tokens to vault_token_account owned by user_vault PDA
             let cpi_accounts = Transfer {
                 from: ctx.accounts.user_token_account.to_account_info(),
@@ -120,23 +135,25 @@ pub mod bitsave {
             token::transfer(cpi_ctx, amount)?;
         }
 
-        saving.owner = ctx.accounts.user.key();
-        saving.name = name;
-        saving.amount = amount;
-        saving.token_mint = ctx.accounts.token_mint.key();
-        saving.start_time = clock.unix_timestamp;
-        saving.maturity_time = maturity_time;
-        saving.penalty_percentage = penalty;
-        saving.is_safe_mode = safe_mode;
-        saving.is_valid = true;
+        saving.set_inner(Saving {
+            owner: ctx.accounts.user.key(),
+            name,
+            amount,
+            token_mint: ctx.accounts.token_mint.key(),
+            start_time: clock.unix_timestamp,
+            maturity_time,
+            penalty_percentage: penalty,
+            is_safe_mode: safe_mode,
+            is_valid: true,
+        });
 
         global_state.total_value_locked += amount;
 
         Ok(())
     }
 
-    pub fn increment_saving(
-        ctx: Context<IncrementSaving>,
+    pub fn increment_saving<'info>(
+        ctx: Context<'_, '_, 'info, 'info, IncrementSaving<'info>>,
         amount: u64,
     ) -> Result<()> {
         let clock = Clock::get()?;
@@ -164,6 +181,17 @@ pub mod bitsave {
                 ],
             )?;
         } else {
+            // Explicit Validation: Verify token accounts match mint and ownership
+            let user_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.user_token_account.data.borrow())?;
+            let vault_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.vault_token_account.data.borrow())?;
+            
+            if user_token.mint != saving.token_mint || vault_token.mint != saving.token_mint {
+                return err!(BitsaveError::InvalidMint);
+            }
+            if vault_token.owner != user_vault.key() {
+                return err!(BitsaveError::InvalidOwner);
+            }
+
             let cpi_accounts = Transfer {
                 from: ctx.accounts.user_token_account.to_account_info(),
                 to: ctx.accounts.vault_token_account.to_account_info(),
@@ -206,6 +234,17 @@ pub mod bitsave {
             **ctx.accounts.user_vault.to_account_info().try_borrow_mut_lamports()? -= amount_to_withdraw;
             **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += amount_to_withdraw;
         } else {
+            // Explicit Validation: Verify token accounts match mint and ownership
+            let user_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.user_token_account.data.borrow())?;
+            let vault_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.vault_token_account.data.borrow())?;
+            
+            if user_token.mint != saving.token_mint || vault_token.mint != saving.token_mint {
+                return err!(BitsaveError::InvalidMint);
+            }
+            if vault_token.owner != ctx.accounts.user_vault.key() {
+                return err!(BitsaveError::InvalidOwner);
+            }
+
             // Withdraw tokens from vault_token_account owned by user_vault PDA
             let cpi_accounts = Transfer {
                 from: ctx.accounts.vault_token_account.to_account_info(),
@@ -253,7 +292,7 @@ pub struct JoinBitsave<'info> {
     pub user_vault: Account<'info, UserVault>,
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: Admin account to receive fees
+    /// CHECK: The admin account specified in GlobalState. It receives the registration fees via System Program transfer.
     #[account(mut, address = global_state.admin)]
     pub admin_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
@@ -276,17 +315,19 @@ pub struct CreateSaving<'info> {
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: Admin account to receive fees
+    /// CHECK: The admin account specified in GlobalState. It receives the saving creation fees.
     #[account(mut, address = global_state.admin)]
     pub admin_account: AccountInfo<'info>,
-    /// CHECK: Token mint or Pubkey::default for SOL
+    /// CHECK: The mint of the token being saved. Use Pubkey::default() for native SOL.
     pub token_mint: AccountInfo<'info>,
-    /// CHECK: Validated manually or via CPI
+    /// CHECK: For SOL savings, this is the user's wallet. For SPL savings, this is the user's Token Account. 
+    /// Explicitly validated in the instruction logic for SPL transfers.
     #[account(mut)]
-    pub user_token_account: UncheckedAccount<'info>,
-    /// CHECK: Validated manually or via CPI
+    pub user_token_account: AccountInfo<'info>,
+    /// CHECK: For SOL savings, this is ignored. For SPL savings, this is the protocol's Token Account owned by the user_vault PDA.
+    /// Explicitly validated in the instruction logic for SPL transfers.
     #[account(mut)]
-    pub vault_token_account: UncheckedAccount<'info>,
+    pub vault_token_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -308,12 +349,14 @@ pub struct IncrementSaving<'info> {
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: Validated manually or via CPI
+    /// CHECK: User's wallet (for SOL) or Token Account (for SPL). 
+    /// Explicitly validated in logic for SPL transfers.
     #[account(mut)]
-    pub user_token_account: UncheckedAccount<'info>,
-    /// CHECK: Validated manually or via CPI
+    pub user_token_account: AccountInfo<'info>,
+    /// CHECK: Protocol's Token Account owned by the user_vault PDA.
+    /// Explicitly validated in logic for SPL transfers.
     #[account(mut)]
-    pub vault_token_account: UncheckedAccount<'info>,
+    pub vault_token_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
 }
@@ -334,12 +377,14 @@ pub struct WithdrawSaving<'info> {
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: Validated manually or via CPI
+    /// CHECK: User's wallet (for SOL) or destination Token Account (for SPL). 
+    /// Explicitly validated in logic for SPL transfers.
     #[account(mut)]
-    pub user_token_account: UncheckedAccount<'info>,
-    /// CHECK: Validated manually or via CPI
+    pub user_token_account: AccountInfo<'info>,
+    /// CHECK: Protocol's Token Account owned by the user_vault PDA.
+    /// Explicitly validated in logic for SPL transfers.
     #[account(mut)]
-    pub vault_token_account: UncheckedAccount<'info>,
+    pub vault_token_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
 }

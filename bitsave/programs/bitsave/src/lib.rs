@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Transfer};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 pub mod constants;
 pub mod state;
@@ -61,8 +61,8 @@ pub mod bitsave {
         Ok(())
     }
 
-    pub fn create_saving<'info>(
-        ctx: Context<'_, '_, 'info, 'info, CreateSaving<'info>>,
+    pub fn create_sol_saving(
+        ctx: Context<CreateSolSaving>,
         name: String,
         maturity_time: i64,
         penalty: u8,
@@ -81,14 +81,13 @@ pub mod bitsave {
         let saving = &mut ctx.accounts.saving;
         let user_vault = &ctx.accounts.user_vault;
 
-        // Transfer saving fee to admin
-        let ix = anchor_lang::solana_program::system_instruction::transfer(
+        let ix_fee = anchor_lang::solana_program::system_instruction::transfer(
             &ctx.accounts.user.key(),
             &global_state.admin,
             global_state.saving_fee,
         );
         anchor_lang::solana_program::program::invoke(
-            &ix,
+            &ix_fee,
             &[
                 ctx.accounts.user.to_account_info(),
                 ctx.accounts.admin_account.to_account_info(),
@@ -96,44 +95,78 @@ pub mod bitsave {
             ],
         )?;
 
-        // Handle funds transfer (SOL or Token)
-        if ctx.accounts.token_mint.key() == Pubkey::default() {
-            // Transfer SOL to user_vault PDA
-            let ix = anchor_lang::solana_program::system_instruction::transfer(
-                &ctx.accounts.user.key(),
-                &user_vault.key(),
-                amount,
-            );
-            anchor_lang::solana_program::program::invoke(
-                &ix,
-                &[
-                    ctx.accounts.user.to_account_info(),
-                    ctx.accounts.user_vault.to_account_info(),
-                    ctx.accounts.system_program.to_account_info(),
-                ],
-            )?;
-        } else {
-            // Explicit Validation: Verify token accounts match mint and ownership
-            let user_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.user_token_account.data.borrow())?;
-            let vault_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.vault_token_account.data.borrow())?;
-            
-            if user_token.mint != ctx.accounts.token_mint.key() || vault_token.mint != ctx.accounts.token_mint.key() {
-                return err!(BitsaveError::InvalidMint);
-            }
-            if vault_token.owner != user_vault.key() {
-                return err!(BitsaveError::InvalidOwner);
-            }
+        let ix_transfer = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.user.key(),
+            &user_vault.key(),
+            amount,
+        );
+        anchor_lang::solana_program::program::invoke(
+            &ix_transfer,
+            &[
+                ctx.accounts.user.to_account_info(),
+                ctx.accounts.user_vault.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+        )?;
 
-            // Transfer tokens to vault_token_account owned by user_vault PDA
-            let cpi_accounts = Transfer {
-                from: ctx.accounts.user_token_account.to_account_info(),
-                to: ctx.accounts.vault_token_account.to_account_info(),
-                authority: ctx.accounts.user.to_account_info(),
-            };
-            let cpi_program = ctx.accounts.token_program.to_account_info();
-            let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-            token::transfer(cpi_ctx, amount)?;
+        saving.set_inner(Saving {
+            owner: ctx.accounts.user.key(),
+            name,
+            amount,
+            token_mint: Pubkey::default(),
+            start_time: clock.unix_timestamp,
+            maturity_time,
+            penalty_percentage: penalty,
+            is_safe_mode: safe_mode,
+            is_valid: true,
+        });
+
+        global_state.total_value_locked += amount;
+
+        Ok(())
+    }
+
+    pub fn create_token_saving(
+        ctx: Context<CreateTokenSaving>,
+        name: String,
+        maturity_time: i64,
+        penalty: u8,
+        safe_mode: bool,
+        amount: u64,
+    ) -> Result<()> {
+        let clock = Clock::get()?;
+        if maturity_time <= clock.unix_timestamp {
+            return err!(BitsaveError::InvalidTime);
         }
+        if safe_mode {
+            return err!(BitsaveError::NotSupported);
+        }
+
+        let global_state = &mut ctx.accounts.global_state;
+        let saving = &mut ctx.accounts.saving;
+
+        let ix_fee = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.user.key(),
+            &global_state.admin,
+            global_state.saving_fee,
+        );
+        anchor_lang::solana_program::program::invoke(
+            &ix_fee,
+            &[
+                ctx.accounts.user.to_account_info(),
+                ctx.accounts.admin_account.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+        )?;
+
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.user_token_account.to_account_info(),
+            to: ctx.accounts.vault_token_account.to_account_info(),
+            authority: ctx.accounts.user.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        token::transfer(cpi_ctx, amount)?;
 
         saving.set_inner(Saving {
             owner: ctx.accounts.user.key(),
@@ -152,8 +185,8 @@ pub mod bitsave {
         Ok(())
     }
 
-    pub fn increment_saving<'info>(
-        ctx: Context<'_, '_, 'info, 'info, IncrementSaving<'info>>,
+    pub fn increment_sol_saving(
+        ctx: Context<IncrementSolSaving>,
         amount: u64,
     ) -> Result<()> {
         let clock = Clock::get()?;
@@ -165,42 +198,19 @@ pub mod bitsave {
             return err!(BitsaveError::InvalidTime);
         }
 
-        // Handle funds transfer
-        if saving.token_mint == Pubkey::default() {
-            let ix = anchor_lang::solana_program::system_instruction::transfer(
-                &ctx.accounts.user.key(),
-                &user_vault.key(),
-                amount,
-            );
-            anchor_lang::solana_program::program::invoke(
-                &ix,
-                &[
-                    ctx.accounts.user.to_account_info(),
-                    ctx.accounts.user_vault.to_account_info(),
-                    ctx.accounts.system_program.to_account_info(),
-                ],
-            )?;
-        } else {
-            // Explicit Validation: Verify token accounts match mint and ownership
-            let user_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.user_token_account.data.borrow())?;
-            let vault_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.vault_token_account.data.borrow())?;
-            
-            if user_token.mint != saving.token_mint || vault_token.mint != saving.token_mint {
-                return err!(BitsaveError::InvalidMint);
-            }
-            if vault_token.owner != user_vault.key() {
-                return err!(BitsaveError::InvalidOwner);
-            }
-
-            let cpi_accounts = Transfer {
-                from: ctx.accounts.user_token_account.to_account_info(),
-                to: ctx.accounts.vault_token_account.to_account_info(),
-                authority: ctx.accounts.user.to_account_info(),
-            };
-            let cpi_program = ctx.accounts.token_program.to_account_info();
-            let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-            token::transfer(cpi_ctx, amount)?;
-        }
+        let ix = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.user.key(),
+            &user_vault.key(),
+            amount,
+        );
+        anchor_lang::solana_program::program::invoke(
+            &ix,
+            &[
+                ctx.accounts.user.to_account_info(),
+                ctx.accounts.user_vault.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+        )?;
 
         saving.amount += amount;
         global_state.total_value_locked += amount;
@@ -208,7 +218,34 @@ pub mod bitsave {
         Ok(())
     }
 
-    pub fn withdraw_saving(ctx: Context<WithdrawSaving>) -> Result<()> {
+    pub fn increment_token_saving(
+        ctx: Context<IncrementTokenSaving>,
+        amount: u64,
+    ) -> Result<()> {
+        let clock = Clock::get()?;
+        let global_state = &mut ctx.accounts.global_state;
+        let saving = &mut ctx.accounts.saving;
+
+        if saving.maturity_time <= clock.unix_timestamp {
+            return err!(BitsaveError::InvalidTime);
+        }
+
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.user_token_account.to_account_info(),
+            to: ctx.accounts.vault_token_account.to_account_info(),
+            authority: ctx.accounts.user.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        token::transfer(cpi_ctx, amount)?;
+
+        saving.amount += amount;
+        global_state.total_value_locked += amount;
+
+        Ok(())
+    }
+
+    pub fn withdraw_sol_saving(ctx: Context<WithdrawSolSaving>) -> Result<()> {
         let clock = Clock::get()?;
         let saving = &mut ctx.accounts.saving;
         let global_state = &mut ctx.accounts.global_state;
@@ -216,11 +253,29 @@ pub mod bitsave {
         let mut amount_to_withdraw = saving.amount;
 
         if clock.unix_timestamp < saving.maturity_time {
-            // Apply penalty
             amount_to_withdraw = amount_to_withdraw * (100 - saving.penalty_percentage as u64) / 100;
         }
 
-        // Perform transfer from PDA to user
+        **ctx.accounts.user_vault.to_account_info().try_borrow_mut_lamports()? -= amount_to_withdraw;
+        **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += amount_to_withdraw;
+
+        global_state.total_value_locked -= saving.amount;
+        saving.is_valid = false;
+        
+        Ok(())
+    }
+
+    pub fn withdraw_token_saving(ctx: Context<WithdrawTokenSaving>) -> Result<()> {
+        let clock = Clock::get()?;
+        let saving = &mut ctx.accounts.saving;
+        let global_state = &mut ctx.accounts.global_state;
+
+        let mut amount_to_withdraw = saving.amount;
+
+        if clock.unix_timestamp < saving.maturity_time {
+            amount_to_withdraw = amount_to_withdraw * (100 - saving.penalty_percentage as u64) / 100;
+        }
+
         let user_vault_seed = ctx.accounts.user.key();
         let seeds = &[
             USER_VAULT_SEED,
@@ -229,32 +284,14 @@ pub mod bitsave {
         ];
         let signer = &[&seeds[..]];
 
-        if saving.token_mint == Pubkey::default() {
-            // Withdraw SOL from PDA
-            **ctx.accounts.user_vault.to_account_info().try_borrow_mut_lamports()? -= amount_to_withdraw;
-            **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += amount_to_withdraw;
-        } else {
-            // Explicit Validation: Verify token accounts match mint and ownership
-            let user_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.user_token_account.data.borrow())?;
-            let vault_token = TokenAccount::try_deserialize(&mut &**ctx.accounts.vault_token_account.data.borrow())?;
-            
-            if user_token.mint != saving.token_mint || vault_token.mint != saving.token_mint {
-                return err!(BitsaveError::InvalidMint);
-            }
-            if vault_token.owner != ctx.accounts.user_vault.key() {
-                return err!(BitsaveError::InvalidOwner);
-            }
-
-            // Withdraw tokens from vault_token_account owned by user_vault PDA
-            let cpi_accounts = Transfer {
-                from: ctx.accounts.vault_token_account.to_account_info(),
-                to: ctx.accounts.user_token_account.to_account_info(),
-                authority: ctx.accounts.user_vault.to_account_info(),
-            };
-            let cpi_program = ctx.accounts.token_program.to_account_info();
-            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
-            token::transfer(cpi_ctx, amount_to_withdraw)?;
-        }
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.vault_token_account.to_account_info(),
+            to: ctx.accounts.user_token_account.to_account_info(),
+            authority: ctx.accounts.user_vault.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
+        token::transfer(cpi_ctx, amount_to_withdraw)?;
 
         global_state.total_value_locked -= saving.amount;
         saving.is_valid = false;
@@ -300,7 +337,30 @@ pub struct JoinBitsave<'info> {
 
 #[derive(Accounts)]
 #[instruction(name: String)]
-pub struct CreateSaving<'info> {
+pub struct CreateSolSaving<'info> {
+    #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
+    pub global_state: Account<'info, GlobalState>,
+    #[account(mut, seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
+    pub user_vault: Account<'info, UserVault>,
+    #[account(
+        init,
+        payer = user,
+        space = 8 + Saving::INIT_SPACE,
+        seeds = [SAVING_SEED, user_vault.key().as_ref(), name.as_bytes()],
+        bump
+    )]
+    pub saving: Account<'info, Saving>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    /// CHECK: The admin account specified in GlobalState.
+    #[account(mut, address = global_state.admin)]
+    pub admin_account: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(name: String)]
+pub struct CreateTokenSaving<'info> {
     #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
     pub global_state: Account<'info, GlobalState>,
     #[account(seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
@@ -315,27 +375,20 @@ pub struct CreateSaving<'info> {
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: The admin account specified in GlobalState. It receives the saving creation fees.
+    /// CHECK: The admin account specified in GlobalState.
     #[account(mut, address = global_state.admin)]
     pub admin_account: AccountInfo<'info>,
-    /// CHECK: The mint of the token being saved. Use Pubkey::default() for native SOL.
-    pub token_mint: AccountInfo<'info>,
-    /// CHECK: For SOL savings, this is the user's wallet. For SPL savings, this is the user's Token Account. 
-    /// Explicitly validated in the instruction logic for SPL transfers.
-    #[account(mut)]
-    pub user_token_account: AccountInfo<'info>,
-    /// CHECK: For SOL savings, this is ignored. For SPL savings, this is the protocol's Token Account owned by the user_vault PDA.
-    /// Explicitly validated in the instruction logic for SPL transfers.
-    #[account(mut)]
-    pub vault_token_account: AccountInfo<'info>,
+    pub token_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut, token::mint = token_mint, token::authority = user)]
+    pub user_token_account: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = token_mint, token::authority = user_vault)]
+    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
-pub struct IncrementSaving<'info> {
+pub struct IncrementSolSaving<'info> {
     #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
     pub global_state: Account<'info, GlobalState>,
     #[account(mut, seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
@@ -344,25 +397,38 @@ pub struct IncrementSaving<'info> {
         mut,
         seeds = [SAVING_SEED, user_vault.key().as_ref(), saving.name.as_bytes()],
         bump,
-        constraint = saving.is_valid && saving.owner == user.key()
+        constraint = saving.is_valid && saving.owner == user.key() && saving.token_mint == Pubkey::default()
     )]
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: User's wallet (for SOL) or Token Account (for SPL). 
-    /// Explicitly validated in logic for SPL transfers.
-    #[account(mut)]
-    pub user_token_account: AccountInfo<'info>,
-    /// CHECK: Protocol's Token Account owned by the user_vault PDA.
-    /// Explicitly validated in logic for SPL transfers.
-    #[account(mut)]
-    pub vault_token_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
-pub struct WithdrawSaving<'info> {
+pub struct IncrementTokenSaving<'info> {
+    #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
+    pub global_state: Account<'info, GlobalState>,
+    #[account(seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
+    pub user_vault: Account<'info, UserVault>,
+    #[account(
+        mut,
+        seeds = [SAVING_SEED, user_vault.key().as_ref(), saving.name.as_bytes()],
+        bump,
+        constraint = saving.is_valid && saving.owner == user.key() && saving.token_mint != Pubkey::default()
+    )]
+    pub saving: Account<'info, Saving>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    #[account(mut, token::mint = saving.token_mint, token::authority = user)]
+    pub user_token_account: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = saving.token_mint, token::authority = user_vault)]
+    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawSolSaving<'info> {
     #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
     pub global_state: Account<'info, GlobalState>,
     #[account(mut, seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
@@ -371,20 +437,34 @@ pub struct WithdrawSaving<'info> {
         mut,
         seeds = [SAVING_SEED, user_vault.key().as_ref(), saving.name.as_bytes()],
         bump,
-        constraint = saving.is_valid && saving.owner == user.key(),
+        constraint = saving.is_valid && saving.owner == user.key() && saving.token_mint == Pubkey::default(),
         close = user
     )]
     pub saving: Account<'info, Saving>,
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: User's wallet (for SOL) or destination Token Account (for SPL). 
-    /// Explicitly validated in logic for SPL transfers.
-    #[account(mut)]
-    pub user_token_account: AccountInfo<'info>,
-    /// CHECK: Protocol's Token Account owned by the user_vault PDA.
-    /// Explicitly validated in logic for SPL transfers.
-    #[account(mut)]
-    pub vault_token_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawTokenSaving<'info> {
+    #[account(mut, seeds = [GLOBAL_STATE_SEED], bump)]
+    pub global_state: Account<'info, GlobalState>,
+    #[account(mut, seeds = [USER_VAULT_SEED, user.key().as_ref()], bump)]
+    pub user_vault: Account<'info, UserVault>,
+    #[account(
+        mut,
+        seeds = [SAVING_SEED, user_vault.key().as_ref(), saving.name.as_bytes()],
+        bump,
+        constraint = saving.is_valid && saving.owner == user.key() && saving.token_mint != Pubkey::default(),
+        close = user
+    )]
+    pub saving: Account<'info, Saving>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    #[account(mut, token::mint = saving.token_mint)]
+    pub user_token_account: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut, token::mint = saving.token_mint, token::authority = user_vault)]
+    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub token_program: Interface<'info, TokenInterface>,
 }

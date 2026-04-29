@@ -20,19 +20,19 @@ When a user interacts with the protocol, they follow a standard lifecycle:
 
 Before a user can save, they must join. They call this instruction to pay a small registration fee (in SOL) to the protocol admin. In return, the program initializes their personalized `UserVault` PDA.
 
-### 2. Creating a Savings Plan (`create_saving`)
+### 2. Creating a Savings Plan (`create_sol_saving` or `create_token_saving`)
 
 The user specifies a name for their goal, a maturity time (when they are allowed to withdraw without penalties), and an amount.
 
-- They can save native SOL or any supported SPL Token.
+- They can save native SOL or any supported SPL Token (using the respective instruction).
 - The funds are securely moved from their personal wallet into a **Protocol Vault Account** that only the Bitsave program can control (specifically, a PDA derived for their vault).
 - A new `Saving` PDA is created to track this specific goal.
 
-### 3. Topping Up (`increment_saving`)
+### 3. Topping Up (`increment_sol_saving` or `increment_token_saving`)
 
 If a user wants to add more funds to a goal before it matures, they call this instruction. It pulls more funds from their wallet into the protocol vault and updates the total balance in the `Saving` account.
 
-### 4. Reaching the Goal (`withdraw_saving`)
+### 4. Reaching the Goal (`withdraw_sol_saving` or `withdraw_token_saving`)
 
 When the user is ready, they call withdraw.
 
@@ -143,11 +143,12 @@ const joinProtocol = async () => {
   try {
     const tx = await program.methods
       .joinBitsave()
-      .accounts({
+      .accountsStrict({
         globalState: globalStatePDA,
         userVault: userVaultPDA,
         user: wallet.publicKey,
         adminAccount: new PublicKey("ADMIN_WALLET_ADDRESS_HERE"),
+        systemProgram: SystemProgram.programId,
       })
       .rpc();
 
@@ -163,10 +164,6 @@ const joinProtocol = async () => {
 ```typescript
 import { BN } from "@coral-xyz/anchor";
 import { SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import {
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
 
 const createSolSaving = async (
   name: string,
@@ -184,19 +181,14 @@ const createSolSaving = async (
 
   try {
     const tx = await program.methods
-      .createSaving(name, maturityTime, penaltyPercentage, safeMode, amount)
-      .accounts({
+      .createSolSaving(name, maturityTime, penaltyPercentage, safeMode, amount)
+      .accountsStrict({
         globalState: globalStatePDA,
         userVault: userVaultPDA,
         saving: savingPDA,
         user: wallet.publicKey,
         adminAccount: new PublicKey("ADMIN_WALLET_ADDRESS_HERE"),
-        tokenMint: PublicKey.default,
-        userTokenAccount: wallet.publicKey,
-        vaultTokenAccount: userVaultPDA,
         systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -227,6 +219,10 @@ const fetchUserData = async () => {
     );
   } catch (error) {
     console.error("Error fetching data. User might not be registered.", error);
+  }
+};
+```
+ta. User might not be registered.", error);
   }
 };
 ```

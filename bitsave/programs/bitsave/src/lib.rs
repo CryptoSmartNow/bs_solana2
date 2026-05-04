@@ -3,14 +3,14 @@ use anchor_spl::token::{self, Transfer};
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 pub mod constants;
-pub mod state;
 pub mod errors;
+pub mod state;
 
 use crate::constants::*;
-use crate::state::*;
 use crate::errors::*;
+use crate::state::*;
 
-declare_id!("8p4LcCZUsg53vjBP6F2cuWUuZNtHqX8v2EF72oQFkoLn");
+declare_id!("3Tt5SpCSTEPseAaA9hSov5TCr8j6bksN4oWZ1x5y2321");
 
 #[program]
 pub mod bitsave {
@@ -37,7 +37,7 @@ pub mod bitsave {
     pub fn join_bitsave(ctx: Context<JoinBitsave>) -> Result<()> {
         let global_state = &mut ctx.accounts.global_state;
         let user_vault = &mut ctx.accounts.user_vault;
-        
+
         // Transfer join fee to admin
         let ix = anchor_lang::solana_program::system_instruction::transfer(
             &ctx.accounts.user.key(),
@@ -57,7 +57,7 @@ pub mod bitsave {
             owner: ctx.accounts.user.key(),
         });
         global_state.user_count += 1;
-        
+
         Ok(())
     }
 
@@ -185,10 +185,7 @@ pub mod bitsave {
         Ok(())
     }
 
-    pub fn increment_sol_saving(
-        ctx: Context<IncrementSolSaving>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn increment_sol_saving(ctx: Context<IncrementSolSaving>, amount: u64) -> Result<()> {
         let clock = Clock::get()?;
         let global_state = &mut ctx.accounts.global_state;
         let saving = &mut ctx.accounts.saving;
@@ -218,10 +215,7 @@ pub mod bitsave {
         Ok(())
     }
 
-    pub fn increment_token_saving(
-        ctx: Context<IncrementTokenSaving>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn increment_token_saving(ctx: Context<IncrementTokenSaving>, amount: u64) -> Result<()> {
         let clock = Clock::get()?;
         let global_state = &mut ctx.accounts.global_state;
         let saving = &mut ctx.accounts.saving;
@@ -245,6 +239,8 @@ pub mod bitsave {
         Ok(())
     }
 
+    // withdraw SOL saving, apply penalty if withdrawn before maturity
+    // close the saving account after withdrawal
     pub fn withdraw_sol_saving(ctx: Context<WithdrawSolSaving>) -> Result<()> {
         let clock = Clock::get()?;
         let saving = &mut ctx.accounts.saving;
@@ -253,18 +249,29 @@ pub mod bitsave {
         let mut amount_to_withdraw = saving.amount;
 
         if clock.unix_timestamp < saving.maturity_time {
-            amount_to_withdraw = amount_to_withdraw * (100 - saving.penalty_percentage as u64) / 100;
+            amount_to_withdraw =
+                amount_to_withdraw * (100 - saving.penalty_percentage as u64) / 100;
         }
 
-        **ctx.accounts.user_vault.to_account_info().try_borrow_mut_lamports()? -= amount_to_withdraw;
-        **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += amount_to_withdraw;
+        **ctx
+            .accounts
+            .user_vault
+            .to_account_info()
+            .try_borrow_mut_lamports()? -= amount_to_withdraw;
+        **ctx
+            .accounts
+            .user
+            .to_account_info()
+            .try_borrow_mut_lamports()? += amount_to_withdraw;
 
         global_state.total_value_locked -= saving.amount;
-        saving.is_valid = false;
-        
+        // saving.is_valid = false;
+
         Ok(())
     }
 
+    // withdraw token saving, apply penalty if withdrawn before maturity
+    // close the saving account after withdrawal
     pub fn withdraw_token_saving(ctx: Context<WithdrawTokenSaving>) -> Result<()> {
         let clock = Clock::get()?;
         let saving = &mut ctx.accounts.saving;
@@ -273,7 +280,8 @@ pub mod bitsave {
         let mut amount_to_withdraw = saving.amount;
 
         if clock.unix_timestamp < saving.maturity_time {
-            amount_to_withdraw = amount_to_withdraw * (100 - saving.penalty_percentage as u64) / 100;
+            amount_to_withdraw =
+                amount_to_withdraw * (100 - saving.penalty_percentage as u64) / 100;
         }
 
         let user_vault_seed = ctx.accounts.user.key();
@@ -294,8 +302,8 @@ pub mod bitsave {
         token::transfer(cpi_ctx, amount_to_withdraw)?;
 
         global_state.total_value_locked -= saving.amount;
-        saving.is_valid = false;
-        
+        // saving.is_valid = false;
+
         Ok(())
     }
 }
